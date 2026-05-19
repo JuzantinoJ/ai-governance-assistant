@@ -1,0 +1,38 @@
+# =============================================================
+# AI Governance & Incident Assistant — .gitignore
+# =============================================================
+
+# --- Environment & Secrets ---
+.env
+*.key
+*.pem
+*.cert
+*.p12
+
+# --- n8n local data ---
+# Never commit local n8n instance data
+.n8n/
+n8n_data/
+postgres_data/
+
+# --- OS files ---
+.DS_Store
+Thumbs.db
+
+# --- Editor files ---
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# --- Node (if any local scripts added later) ---
+node_modules/
+npm-debug.log*
+
+# --- Docker ---
+# Keep docker-compose.yml but ignore any local override files
+docker-compose.override.yml
+
+# --- Logs ---
+*.log
+logs/

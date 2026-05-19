@@ -1,0 +1,121 @@
+# =============================================================
+# AI Governance & Incident Assistant — Docker Compose
+# n8n + PostgreSQL (persistent, production-ready setup)
+#
+# Usage:
+#   1. Copy .env.example to .env and fill in your values
+#   2. Run: docker compose up -d
+#   3. Open: http://localhost:5678
+#
+# To stop:    docker compose down
+# To update:  docker compose pull && docker compose up -d
+# To view logs: docker compose logs -f n8n
+# =============================================================
+
+services:
+
+  # -----------------------------------------------------------
+  # PostgreSQL — persistent database for n8n
+  # n8n stores all workflows, credentials, and execution
+  # history here. Do NOT skip the persistent volume.
+  # -----------------------------------------------------------
+  postgres:
+    image: postgres:16
+    container_name: n8n-postgres
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+
+    volumes:
+      # Persist database data across container restarts
+      - postgres_data:/var/lib/postgresql/data
+
+    healthcheck:
+      # n8n will not start until Postgres is confirmed ready
+      test: ["CMD-SHELL", "pg_isready -h localhost -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+    networks:
+      - n8n-network
+
+  # -----------------------------------------------------------
+  # n8n — workflow automation engine
+  # Accessible at http://localhost:5678
+  #
+  # IMPORTANT: The /home/node/.n8n volume persists your
+  # encryption key and instance data. Never delete it.
+  # If you lose the encryption key, saved credentials
+  # cannot be recovered.
+  # -----------------------------------------------------------
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    container_name: n8n
+    restart: unless-stopped
+
+    environment:
+      # --- Database connection ---
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres        # Must match service name above
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_DATABASE: ${POSTGRES_DB}
+      DB_POSTGRESDB_USER: ${POSTGRES_USER}
+      DB_POSTGRESDB_PASSWORD: ${POSTGRES_PASSWORD}
+
+      # --- n8n core settings ---
+      N8N_HOST: ${N8N_HOST:-localhost}
+      N8N_PORT: 5678
+      N8N_PROTOCOL: ${N8N_PROTOCOL:-http}
+      WEBHOOK_URL: ${WEBHOOK_URL:-http://localhost:5678/}
+
+      # --- Encryption key for credentials at rest ---
+      # Set this ONCE before first run. Never change it after.
+      # Generate with: openssl rand -hex 32
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
+
+      # --- Timezone ---
+      # Controls schedule nodes and timestamps
+      GENERIC_TIMEZONE: ${GENERIC_TIMEZONE:-Asia/Kuala_Lumpur}
+      TZ: ${GENERIC_TIMEZONE:-Asia/Kuala_Lumpur}
+
+      # --- Execution settings ---
+      EXECUTIONS_DATA_SAVE_ON_ERROR: all
+      EXECUTIONS_DATA_SAVE_ON_SUCCESS: all
+      EXECUTIONS_DATA_SAVE_MANUAL_EXECUTIONS: true
+
+      # --- Security ---
+      N8N_SECURE_COOKIE: "false"    # Set to true when behind HTTPS
+
+    ports:
+      - "5678:5678"
+
+    volumes:
+      # Persists encryption key and n8n instance data
+      - n8n_data:/home/node/.n8n
+
+    depends_on:
+      postgres:
+        condition: service_healthy    # Wait for Postgres to be ready
+
+    networks:
+      - n8n-network
+
+# -----------------------------------------------------------
+# Named volumes — data persists across container restarts
+# To back up: docker run --rm -v n8n_data:/data alpine tar czf - /data
+# -----------------------------------------------------------
+volumes:
+  postgres_data:
+  n8n_data:
+
+# -----------------------------------------------------------
+# Isolated network — containers talk to each other
+# but are not exposed unnecessarily to the host network
+# -----------------------------------------------------------
+networks:
+  n8n-network:
+    driver: bridge

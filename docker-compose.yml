@@ -13,7 +13,6 @@
 # =============================================================
 
 services:
-
   # -----------------------------------------------------------
   # PostgreSQL — persistent database for n8n
   # n8n stores all workflows, credentials, and execution
@@ -35,7 +34,11 @@ services:
 
     healthcheck:
       # n8n will not start until Postgres is confirmed ready
-      test: ["CMD-SHELL", "pg_isready -h localhost -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -h localhost -U ${POSTGRES_USER} -d ${POSTGRES_DB}",
+        ]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -60,7 +63,7 @@ services:
     environment:
       # --- Database connection ---
       DB_TYPE: postgresdb
-      DB_POSTGRESDB_HOST: postgres        # Must match service name above
+      DB_POSTGRESDB_HOST: postgres # Must match service name above
       DB_POSTGRESDB_PORT: 5432
       DB_POSTGRESDB_DATABASE: ${POSTGRES_DB}
       DB_POSTGRESDB_USER: ${POSTGRES_USER}
@@ -88,7 +91,7 @@ services:
       EXECUTIONS_DATA_SAVE_MANUAL_EXECUTIONS: true
 
       # --- Security ---
-      N8N_SECURE_COOKIE: "false"    # Set to true when behind HTTPS
+      N8N_SECURE_COOKIE: "false" # Set to true when behind HTTPS
 
     ports:
       - "5678:5678"
@@ -99,7 +102,7 @@ services:
 
     depends_on:
       postgres:
-        condition: service_healthy    # Wait for Postgres to be ready
+        condition: service_healthy # Wait for Postgres to be ready
 
     networks:
       - n8n-network

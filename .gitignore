@@ -8,6 +8,7 @@
 *.pem
 *.cert
 *.p12
+start-ai.sh
 
 # --- n8n local data ---
 # Never commit local n8n instance data

@@ -1,0 +1,86 @@
+{
+  "name": "ai-governance-v1-main",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "incident-intake",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -512,
+        -464
+      ],
+      "id": "3cf6ffba-c258-46a4-8866-f71a1577932b",
+      "name": "Webhook",
+      "webhookId": "2313c91a-75c4-41f6-a57a-23999c87f7ec"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"status\": \"received\",\n  \"run_id\": \"={{ $json.run_id }}\",\n  \"validated\": true,\n  \"char_count\": \"={{ $json.char_count }}\",\n  \"received_at\": \"={{ $json.received_at }}\",\n  \"message\": \"Input accepted and validated.\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        -16,
+        -480
+      ],
+      "id": "b68952ea-dc5f-4aad-b6f3-4e92bcb690e9",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Node:    validate-and-sanitize-input\n// Purpose: Sanitize and validate all user input before it\n//          reaches the AI layer. Nothing passes through\n//          without being checked here first.\n// Version: 1.0\n// Phase:   1 — Foundation\n// ============================================================\n\nconst MAX_LENGTH = 4000;\nconst MIN_LENGTH = 10;\n\n// ── Step 1: Pull the raw input from the webhook body ────────\n// We expect the caller to send { \"text\": \"...\" }\n// If the field is missing, rawInput becomes an empty string\nconst rawInput = $input.first().json?.body?.text || \"\";\n\n// ── Step 2: Type check ──────────────────────────────────────\nif (typeof rawInput !== \"string\") {\n  throw new Error(\"VALIDATION_FAILED: Input must be a string\");\n}\n\n// ── Step 3: Length checks ───────────────────────────────────\nif (rawInput.trim().length < MIN_LENGTH) {\n  throw new Error(\n    `VALIDATION_FAILED: Input too short. Minimum is ${MIN_LENGTH} characters.`\n  );\n}\n\nif (rawInput.length > MAX_LENGTH) {\n  throw new Error(\n    `VALIDATION_FAILED: Input too long. Maximum is ${MAX_LENGTH} characters.`\n  );\n}\n\n// ── Step 4: Strip HTML tags ─────────────────────────────────\n// Removes anything like <script>, <b>, <img src=...> etc.\nconst stripHtml = (str) => str.replace(/<[^>]*>/g, \"\");\n\n// ── Step 5: Block prompt injection patterns ─────────────────\n// These phrases are common attempts to hijack the AI system prompt.\n// If detected, we reject the input before it ever reaches the model.\nconst blockPatterns = [\n  /ignore previous instructions/i,\n  /forget your instructions/i,\n  /you are now/i,\n  /disregard all/i,\n  /system prompt/i,\n  /override your/i,\n  /act as if/i,\n  /pretend you are/i,\n];\n\nfor (const pattern of blockPatterns) {\n  if (pattern.test(rawInput)) {\n    throw new Error(\n      \"VALIDATION_FAILED: Input contains disallowed content\"\n    );\n  }\n}\n\n// ── Step 6: Clean the input ─────────────────────────────────\nconst cleanedInput = stripHtml(rawInput).trim();\n\n// ── Step 7: Return structured output ────────────────────────\n// This object flows into the next node.\n// Every field here is intentional:\n//   clean_text  → what the AI will actually receive\n//   run_id      → unique ID that tracks this request through the entire pipeline\n//   received_at → UTC timestamp for the audit trail\n//   char_count  → useful for logging and debugging\nreturn [{\n  json: {\n    validated: true,\n    clean_text: cleanedInput,\n    char_count: cleanedInput.length,\n    received_at: new Date().toISOString(),\n    run_id: 'run-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9),\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -272,
+        -624
+      ],
+      "id": "5d3628bb-7df8-49d2-92a3-d8a1f8920f1a",
+      "name": "validate-and-sanitize-input"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "validate-and-sanitize-input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "validate-and-sanitize-input": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "f2bb4a02-cf6c-4995-a7ff-e7cbf754a5c1",
+  "meta": {
+    "instanceId": "135fefcd35d2d1eb69cc2b51fe5147e7b2bfa25aa5dbf3c2d57489b1eb06b427"
+  },
+  "id": "r11BAy6DGjCpZ6y1",
+  "tags": []
+}

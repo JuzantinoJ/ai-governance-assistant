@@ -27,8 +27,8 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
       "position": [
-        -16,
-        -480
+        -176,
+        -320
       ],
       "id": "b68952ea-dc5f-4aad-b6f3-4e92bcb690e9",
       "name": "Respond to Webhook"
@@ -40,11 +40,145 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -272,
-        -624
+        -352,
+        -848
       ],
       "id": "5d3628bb-7df8-49d2-92a3-d8a1f8920f1a",
       "name": "validate-and-sanitize-input"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "claude-sonnet-4-5-20250929",
+          "mode": "list",
+          "cachedResultName": "claude-sonnet-4-5-20250929"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "You are an enterprise security and governance analyst.\nClassify the following finding and respond ONLY with valid JSON.\nDo not include any explanation, markdown, or text outside the JSON block.\n\nOutput format:\n{\n  \"type\": \"incident|vulnerability|audit|governance|ssp|vendor|patch|ticket\",\n  \"severity\": \"CRITICAL|HIGH|MEDIUM|LOW|INFO\",\n  \"confidence\": 0.95,\n  \"keywords\": [\"keyword1\", \"keyword2\"],\n  \"requires_immediate_action\": true\n}",
+              "role": "assistant"
+            },
+            {
+              "content": "={{ $('validate-and-sanitize-input').item.json.clean_text }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.anthropic",
+      "typeVersion": 1,
+      "position": [
+        -144,
+        -832
+      ],
+      "id": "f84bafc2-dc9f-4a3a-9068-c82feb8cd26c",
+      "name": "ai-classify-input",
+      "credentials": {
+        "anthropicApi": {
+          "id": "fiDlzJ5fLKPtmEAq",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "claude-sonnet-4-5-20250929",
+          "mode": "list",
+          "cachedResultName": "claude-sonnet-4-5-20250929"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "Respond with plain text only. No markdown. No bullet points. No headers.\nYou are a senior technical writer for an enterprise security team.\nSummarize the following finding in exactly 2-3 sentences.\nBe factual. Do not speculate. Do not add information not present in the input.",
+              "role": "assistant"
+            },
+            {
+              "content": "=Finding: {{ $('validate-and-sanitize-input').item.json.clean_text }}\n\nClassification: Type is {{ $json.type }}, Severity is {{ $json.severity }}."
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.anthropic",
+      "typeVersion": 1,
+      "position": [
+        400,
+        -832
+      ],
+      "id": "d07ec4c3-3221-4b6d-9bf1-ce4ae6b5d868",
+      "name": "ai-summarize-input",
+      "credentials": {
+        "anthropicApi": {
+          "id": "fiDlzJ5fLKPtmEAq",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "claude-sonnet-4-5-20250929",
+          "mode": "list",
+          "cachedResultName": "claude-sonnet-4-5-20250929"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "Respond with raw JSON only. No markdown. No code fences. No explanation.\nYou are an enterprise incident response coordinator.\nExtract all action items from the following finding.\n\nOutput format:\n{\n  \"action_items\": [\n    {\n      \"action\": \"string\",\n      \"owner\": \"string or UNASSIGNED\",\n      \"priority\": \"IMMEDIATE|24H|72H|7DAYS\",\n      \"due_date_hint\": \"string or null\"\n    }\n  ],\n  \"escalation_required\": true\n}",
+              "role": "assistant"
+            },
+            {
+              "content": "=Finding: {{ $('validate-and-sanitize-input').item.json.clean_text }}\n\nSummary: {{ $('ai-summarize-input').item.json.content[0].text }}\n\nSeverity: {{ $('parse-classify-output').item.json.severity }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.anthropic",
+      "typeVersion": 1,
+      "position": [
+        400,
+        -592
+      ],
+      "id": "f4f01cb8-2f06-42ee-91c1-3da19556c06c",
+      "name": "ai-extract-actions",
+      "credentials": {
+        "anthropicApi": {
+          "id": "fiDlzJ5fLKPtmEAq",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Node:    parse-extract-output\n// Purpose: Parse action items JSON from Claude response\n// Version: 1.0\n// ============================================================\n\nconst rawResponse = $input.first().json?.content?.[0]?.text || \"\";\n\nconst stripped = rawResponse\n  .replace(/^```json\\s*/i, \"\")\n  .replace(/^```\\s*/i, \"\")\n  .replace(/```\\s*$/i, \"\")\n  .trim();\n\nlet parsed;\ntry {\n  parsed = JSON.parse(stripped);\n} catch (e) {\n  return [{\n    json: {\n      parse_error: true,\n      parse_error_message: e.message,\n      action_items: [],\n      escalation_required: false,\n    }\n  }];\n}\n\n// Get summary text from previous node\nconst summaryText = $('ai-summarize-input').item.json?.content?.[0]?.text || \"\";\n\n// Get classification data\nconst classification = $('parse-classify-output').item.json;\n\n// Assemble the full enriched object\nreturn [{\n  json: {\n    // From Phase 1\n    run_id: $('validate-and-sanitize-input').item.json.run_id,\n    received_at: $('validate-and-sanitize-input').item.json.received_at,\n    clean_text: $('validate-and-sanitize-input').item.json.clean_text,\n\n    // From classify\n    type: classification.type,\n    severity: classification.severity,\n    confidence: classification.confidence,\n    keywords: classification.keywords,\n    requires_immediate_action: classification.requires_immediate_action,\n\n    // From summarize\n    summary: summaryText,\n\n    // From extract actions\n    action_items: parsed.action_items || [],\n    action_count: (parsed.action_items || []).length,\n    escalation_required: parsed.escalation_required || false,\n\n    // Meta\n    parse_error: false,\n    processing_complete: true,\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        752,
+        -592
+      ],
+      "id": "1613939f-b466-4502-91e2-cb3cd4523cfd",
+      "name": "parse-extract-output"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Node:    parse-classify-output\n// Purpose: Strip markdown fences from AI response and parse\n//          into clean JSON that downstream nodes can use\n// Version: 1.0\n// Phase:   2 — AI Core\n// ============================================================\n\n// Get the raw text response from Claude\nconst rawResponse = $input.first().json?.content?.[0]?.text || \"\";\n\n// Strip markdown code fences if present\n// Handles ```json ... ``` and ``` ... ```\nconst stripped = rawResponse\n  .replace(/^```json\\s*/i, \"\")\n  .replace(/^```\\s*/i, \"\")\n  .replace(/```\\s*$/i, \"\")\n  .trim();\n\n// Attempt to parse as JSON\nlet parsed;\ntry {\n  parsed = JSON.parse(stripped);\n} catch (e) {\n  // If parsing fails, flag it for the validator\n  return [{\n    json: {\n      parse_error: true,\n      parse_error_message: e.message,\n      raw_response: rawResponse,\n      validated: false,\n    }\n  }];\n}\n\n// Validate required fields exist\nconst requiredFields = [\"type\", \"severity\", \"confidence\", \"keywords\", \"requires_immediate_action\"];\nconst missingFields = requiredFields.filter(f => !(f in parsed));\n\nif (missingFields.length > 0) {\n  return [{\n    json: {\n      parse_error: true,\n      parse_error_message: `Missing fields: ${missingFields.join(\", \")}`,\n      raw_response: rawResponse,\n      validated: false,\n    }\n  }];\n}\n\n// Valid confidence gate — if Claude is less than 60% confident, flag for review\nif (parsed.confidence < 0.6) {\n  parsed.low_confidence_flag = true;\n  parsed.review_required = true;\n} else {\n  parsed.low_confidence_flag = false;\n  parsed.review_required = false;\n}\n\n// Pass everything forward including the run_id from Phase 1\nreturn [{\n  json: {\n    ...parsed,\n    parse_error: false,\n    validated: true,\n    run_id: $('validate-and-sanitize-input').item.json.run_id,\n    received_at: $('validate-and-sanitize-input').item.json.received_at,\n    clean_text: $('validate-and-sanitize-input').item.json.clean_text,\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        192,
+        -832
+      ],
+      "id": "41674041-9502-4b47-bd63-b2106c1f4713",
+      "name": "parse-classify-output"
     }
   ],
   "pinData": {},
@@ -64,7 +198,62 @@
       "main": [
         [
           {
+            "node": "ai-classify-input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ai-classify-input": {
+      "main": [
+        [
+          {
+            "node": "parse-classify-output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ai-summarize-input": {
+      "main": [
+        [
+          {
+            "node": "ai-extract-actions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ai-extract-actions": {
+      "main": [
+        [
+          {
+            "node": "parse-extract-output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "parse-extract-output": {
+      "main": [
+        [
+          {
             "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "parse-classify-output": {
+      "main": [
+        [
+          {
+            "node": "ai-summarize-input",
             "type": "main",
             "index": 0
           }
@@ -77,8 +266,9 @@
     "executionOrder": "v1",
     "binaryMode": "separate"
   },
-  "versionId": "f2bb4a02-cf6c-4995-a7ff-e7cbf754a5c1",
+  "versionId": "1a3b0ff0-0c3f-4945-a49c-1886c4ecffbc",
   "meta": {
+    "templateCredsSetupCompleted": true,
     "instanceId": "135fefcd35d2d1eb69cc2b51fe5147e7b2bfa25aa5dbf3c2d57489b1eb06b427"
   },
   "id": "r11BAy6DGjCpZ6y1",
